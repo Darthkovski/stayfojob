@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Wohnungsbuchungen 2025</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .flex-container { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+    .form-section { background: #f9f9f9; padding: 15px; border-radius: 6px; width: 300px; }
+    .calendar-section { margin-top: 20px; }
+    label { display: block; margin-top: 8px; }
+    input, select { width: 100%; padding: 5px; }
+    button { margin-top: 10px; padding: 8px 16px; }
+    table { border-collapse: collapse; font-size: 11px; }
+    th, td { border: 1px solid #ccc; padding: 5px; text-align: center; min-width: 35px; min-height: 25px; }
+    th { background: #eee; }
+    td.reserved { background-color: #f99; cursor: pointer; }
+    .calendar-wrapper { overflow-x: auto; }
+    .month-nav { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<h2>Wohnungsbuchungen 2025</h2>
+
+<div class="flex-container">
+    <div class="form-section">
+        <details open>
+            <summary><strong>Wohnungen verwalten</strong></summary>
+            <ul id="apartmentList" style="list-style:none; padding:0; margin-top:10px;"></ul>
+            <button onclick="addApartment()">Wohnung hinzufügen</button>
+        </details>
+    </div>
+
+    <div class="form-section">
+        <form onsubmit="addBooking(); return false;">
+            <label>Von: <input type="date" id="startDate" required></label>
+            <label>Bis: <input type="date" id="endDate" required></label>
+            <label>Wohnung:
+                <select id="apartmentSelect"></select>
+            </label>
+            <label>Firma: <input type="text" id="companyName" required></label>
+            <label>Rechnungsbetrag (€): <input type="number" id="invoiceAmount" required></label>
+            <label>Email: <input type="email" id="companyEmail" required></label>
+            <button type="submit">Buchung speichern</button>
+        </form>
+        <button onclick="exportToExcel()">Export nach Excel</button>
+    </div>
+</div>
+
+<div class="calendar-section">
+    <div class="month-nav">
+        <button onclick="changeMonth(-1)">&#8592; Zurück</button>
+        <span id="monthLabel" style="font-weight:bold; margin: 0 20px;"></span>
+        <button onclick="changeMonth(1)">Weiter &#8594;</button>
+    </div>
+    <div class="calendar-wrapper">
+        <table id="calendarTable">
+            <thead id="calendarHead"></thead>
+            <tbody id="calendarBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
+    background:white; border:2px solid #ccc; padding:20px; z-index:1000; width:300px; font-size:14px;">
+    <h3>Buchung bearbeiten</h3>
+    <label>Von: <input type="date" id="editStartDate"></label>
+    <label>Bis: <input type="date" id="editEndDate"></label>
+    <label>Wohnung:
+        <select id="editApartmentSelect"></select>
+    </label>
+    <label>Firma: <input type="text" id="editCompanyName"></label>
+    <label>Email: <input type="email" id="editEmail"></label>
+    <label>Rechnungsbetrag (€): <input type="number" id="editAmount"></label>
+    <div style="margin-top:10px;">
+        <button onclick="saveChanges()">Speichern</button>
+        <button onclick="deleteBooking()">Löschen</button>
+        <button onclick="closeModal()">Abbrechen</button>
+    </div>
+</div>
+
+<script>
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monthDays = {1: ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04', '2025-01-05', '2025-01-06', '2025-01-07', '2025-01-08', '2025-01-09', '2025-01-10', '2025-01-11', '2025-01-12', '2025-01-13', '2025-01-14', '2025-01-15', '2025-01-16', '2025-01-17', '2025-01-18', '2025-01-19', '2025-01-20', '2025-01-21', '2025-01-22', '2025-01-23', '2025-01-24', '2025-01-25', '2025-01-26', '2025-01-27', '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31'], 2: ['2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04', '2025-02-05', '2025-02-06', '2025-02-07', '2025-02-08', '2025-02-09', '2025-02-10', '2025-02-11', '2025-02-12', '2025-02-13', '2025-02-14', '2025-02-15', '2025-02-16', '2025-02-17', '2025-02-18', '2025-02-19', '2025-02-20', '2025-02-21', '2025-02-22', '2025-02-23', '2025-02-24', '2025-02-25', '2025-02-26', '2025-02-27', '2025-02-28'], 3: ['2025-03-01', '2025-03-02', '2025-03-03', '2025-03-04', '2025-03-05', '2025-03-06', '2025-03-07', '2025-03-08', '2025-03-09', '2025-03-10', '2025-03-11', '2025-03-12', '2025-03-13', '2025-03-14', '2025-03-15', '2025-03-16', '2025-03-17', '2025-03-18', '2025-03-19', '2025-03-20', '2025-03-21', '2025-03-22', '2025-03-23', '2025-03-24', '2025-03-25', '2025-03-26', '2025-03-27', '2025-03-28', '2025-03-29', '2025-03-30', '2025-03-31'], 4: ['2025-04-01', '2025-04-02', '2025-04-03', '2025-04-04', '2025-04-05', '2025-04-06', '2025-04-07', '2025-04-08', '2025-04-09', '2025-04-10', '2025-04-11', '2025-04-12', '2025-04-13', '2025-04-14', '2025-04-15', '2025-04-16', '2025-04-17', '2025-04-18', '2025-04-19', '2025-04-20', '2025-04-21', '2025-04-22', '2025-04-23', '2025-04-24', '2025-04-25', '2025-04-26', '2025-04-27', '2025-04-28', '2025-04-29', '2025-04-30'], 5: ['2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05', '2025-05-06', '2025-05-07', '2025-05-08', '2025-05-09', '2025-05-10', '2025-05-11', '2025-05-12', '2025-05-13', '2025-05-14', '2025-05-15', '2025-05-16', '2025-05-17', '2025-05-18', '2025-05-19', '2025-05-20', '2025-05-21', '2025-05-22', '2025-05-23', '2025-05-24', '2025-05-25', '2025-05-26', '2025-05-27', '2025-05-28', '2025-05-29', '2025-05-30', '2025-05-31'], 6: ['2025-06-01', '2025-06-02', '2025-06-03', '2025-06-04', '2025-06-05', '2025-06-06', '2025-06-07', '2025-06-08', '2025-06-09', '2025-06-10', '2025-06-11', '2025-06-12', '2025-06-13', '2025-06-14', '2025-06-15', '2025-06-16', '2025-06-17', '2025-06-18', '2025-06-19', '2025-06-20', '2025-06-21', '2025-06-22', '2025-06-23', '2025-06-24', '2025-06-25', '2025-06-26', '2025-06-27', '2025-06-28', '2025-06-29', '2025-06-30'], 7: ['2025-07-01', '2025-07-02', '2025-07-03', '2025-07-04', '2025-07-05', '2025-07-06', '2025-07-07', '2025-07-08', '2025-07-09', '2025-07-10', '2025-07-11', '2025-07-12', '2025-07-13', '2025-07-14', '2025-07-15', '2025-07-16', '2025-07-17', '2025-07-18', '2025-07-19', '2025-07-20', '2025-07-21', '2025-07-22', '2025-07-23', '2025-07-24', '2025-07-25', '2025-07-26', '2025-07-27', '2025-07-28', '2025-07-29', '2025-07-30', '2025-07-31'], 8: ['2025-08-01', '2025-08-02', '2025-08-03', '2025-08-04', '2025-08-05', '2025-08-06', '2025-08-07', '2025-08-08', '2025-08-09', '2025-08-10', '2025-08-11', '2025-08-12', '2025-08-13', '2025-08-14', '2025-08-15', '2025-08-16', '2025-08-17', '2025-08-18', '2025-08-19', '2025-08-20', '2025-08-21', '2025-08-22', '2025-08-23', '2025-08-24', '2025-08-25', '2025-08-26', '2025-08-27', '2025-08-28', '2025-08-29', '2025-08-30', '2025-08-31'], 9: ['2025-09-01', '2025-09-02', '2025-09-03', '2025-09-04', '2025-09-05', '2025-09-06', '2025-09-07', '2025-09-08', '2025-09-09', '2025-09-10', '2025-09-11', '2025-09-12', '2025-09-13', '2025-09-14', '2025-09-15', '2025-09-16', '2025-09-17', '2025-09-18', '2025-09-19', '2025-09-20', '2025-09-21', '2025-09-22', '2025-09-23', '2025-09-24', '2025-09-25', '2025-09-26', '2025-09-27', '2025-09-28', '2025-09-29', '2025-09-30'], 10: ['2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07', '2025-10-08', '2025-10-09', '2025-10-10', '2025-10-11', '2025-10-12', '2025-10-13', '2025-10-14', '2025-10-15', '2025-10-16', '2025-10-17', '2025-10-18', '2025-10-19', '2025-10-20', '2025-10-21', '2025-10-22', '2025-10-23', '2025-10-24', '2025-10-25', '2025-10-26', '2025-10-27', '2025-10-28', '2025-10-29', '2025-10-30', '2025-10-31'], 11: ['2025-11-01', '2025-11-02', '2025-11-03', '2025-11-04', '2025-11-05', '2025-11-06', '2025-11-07', '2025-11-08', '2025-11-09', '2025-11-10', '2025-11-11', '2025-11-12', '2025-11-13', '2025-11-14', '2025-11-15', '2025-11-16', '2025-11-17', '2025-11-18', '2025-11-19', '2025-11-20', '2025-11-21', '2025-11-22', '2025-11-23', '2025-11-24', '2025-11-25', '2025-11-26', '2025-11-27', '2025-11-28', '2025-11-29', '2025-11-30'], 12: ['2025-12-01', '2025-12-02', '2025-12-03', '2025-12-04', '2025-12-05', '2025-12-06', '2025-12-07', '2025-12-08', '2025-12-09', '2025-12-10', '2025-12-11', '2025-12-12', '2025-12-13', '2025-12-14', '2025-12-15', '2025-12-16', '2025-12-17', '2025-12-18', '2025-12-19', '2025-12-20', '2025-12-21', '2025-12-22', '2025-12-23', '2025-12-24', '2025-12-25', '2025-12-26', '2025-12-27', '2025-12-28', '2025-12-29', '2025-12-30', '2025-12-31']};
+let currentMonth = 1;
+let currentEditIndex = null;
+
+let apartments = JSON.parse(localStorage.getItem('apartments2025') || '["Wohnung 1","Wohnung 2","Wohnung 3"]');
+let bookings = JSON.parse(localStorage.getItem('bookings2025') || '[]');
+
+function renderApartmentList() {
+    const ul = document.getElementById('apartmentList');
+    ul.innerHTML = '';
+    apartments.forEach((name, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<input value="${name}" onchange="renameApartment(${i}, this.value)" />
+                        <button onclick="removeApartment(${i})">Löschen</button>`;
+        ul.appendChild(li);
+    });
+    updateApartmentSelects();
+    buildCalendar();
+}
+
+function renameApartment(index, value) {
+    apartments[index] = value;
+    localStorage.setItem('apartments2025', JSON.stringify(apartments));
+    renderApartmentList();
+}
+
+function addApartment() {
+    if (apartments.length >= 50) {
+        alert("Maximal 50 Wohnungen erlaubt.");
+        return;
+    }
+    const name = prompt("Name der neuen Wohnung:", "Wohnung " + (apartments.length + 1));
+    if (name) {
+        apartments.push(name);
+        localStorage.setItem('apartments2025', JSON.stringify(apartments));
+        renderApartmentList();
+    }
+}
+
+function removeApartment(index) {
+    const aptKey = (index + 1).toString();
+    const used = bookings.some(b => b.apartment === aptKey);
+    if (used) {
+        alert("Diese Wohnung ist bereits gebucht und kann nicht gelöscht werden.");
+        return;
+    }
+    apartments.splice(index, 1);
+    localStorage.setItem('apartments2025', JSON.stringify(apartments));
+    renderApartmentList();
+}
+
+function updateApartmentSelects() {
+    const select1 = document.getElementById('apartmentSelect');
+    const select2 = document.getElementById('editApartmentSelect');
+    select1.innerHTML = '';
+    select2.innerHTML = '';
+    apartments.forEach((name, i) => {
+        const opt = new Option(name, i + 1);
+        const opt2 = new Option(name, i + 1);
+        select1.add(opt);
+        select2.add(opt2);
+    });
+}
+
+function buildCalendar() {
+    const head = document.getElementById('calendarHead');
+    const body = document.getElementById('calendarBody');
+    const days = monthDays[currentMonth];
+    document.getElementById("monthLabel").textContent = monthNames[currentMonth - 1];
+
+    head.innerHTML = "<tr><th>Wohnung</th>" + days.map(d => `<th>${d.slice(8)}</th>`).join('') + "</tr>";
+    body.innerHTML = '';
+    apartments.forEach((apt, i) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<th>${apt}</th>`;
+        days.forEach(date => {
+            const td = document.createElement('td');
+            td.setAttribute('data-apartment', i + 1);
+            td.setAttribute('data-date', date);
+            const bookingIndex = bookings.findIndex(b => b.apartment == i + 1 && date >= b.start && date <= b.end);
+            if (bookingIndex !== -1) {
+                td.classList.add('reserved');
+                td.setAttribute('data-booking', bookingIndex);
+                td.setAttribute('onclick', 'showBookingDetails(this)');
+            }
+            row.appendChild(td);
+        });
+        body.appendChild(row);
+    });
+}
+
+function addBooking() {
+    bookings.push({
+        start: document.getElementById('startDate').value,
+        end: document.getElementById('endDate').value,
+        apartment: document.getElementById('apartmentSelect').value,
+        company: document.getElementById('companyName').value,
+        amount: document.getElementById('invoiceAmount').value,
+        email: document.getElementById('companyEmail').value
+    });
+    localStorage.setItem('bookings2025', JSON.stringify(bookings));
+    buildCalendar();
+}
+
+function changeMonth(offset) {
+    currentMonth += offset;
+    if (currentMonth < 1) currentMonth = 12;
+    if (currentMonth > 12) currentMonth = 1;
+    buildCalendar();
+}
+
+function showBookingDetails(cell) {
+    const index = cell.getAttribute('data-booking');
+    if (index === null) return;
+    currentEditIndex = parseInt(index);
+    const b = bookings[currentEditIndex];
+    document.getElementById('editStartDate').value = b.start;
+    document.getElementById('editEndDate').value = b.end;
+    document.getElementById('editApartmentSelect').value = b.apartment;
+    document.getElementById('editCompanyName').value = b.company;
+    document.getElementById('editEmail').value = b.email;
+    document.getElementById('editAmount').value = b.amount;
+    document.getElementById('modal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+}
+
+function deleteBooking() {
+    if (currentEditIndex !== null) {
+        if (confirm("Diese Buchung wirklich löschen?")) {
+            bookings.splice(currentEditIndex, 1);
+            localStorage.setItem('bookings2025', JSON.stringify(bookings));
+            buildCalendar();
+            closeModal();
+        }
+    }
+}
+
+function saveChanges() {
+    if (currentEditIndex !== null) {
+        bookings[currentEditIndex] = {
+            start: document.getElementById('editStartDate').value,
+            end: document.getElementById('editEndDate').value,
+            apartment: document.getElementById('editApartmentSelect').value,
+            company: document.getElementById('editCompanyName').value,
+            email: document.getElementById('editEmail').value,
+            amount: document.getElementById('editAmount').value
+        };
+        localStorage.setItem('bookings2025', JSON.stringify(bookings));
+        buildCalendar();
+        closeModal();
+    }
+}
+
+function exportToExcel() {
+    const ws_data = [["Von", "Bis", "Wohnung", "Firma", "Rechnungsbetrag", "Email"]];
+    bookings.forEach(b => {
+        const aptName = apartments[parseInt(b.apartment) - 1] || "Wohnung " + b.apartment;
+        ws_data.push([b.start, b.end, aptName, b.company, b.amount, b.email]);
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, "Buchungen");
+    XLSX.writeFile(wb, "Wohnungsbuchungen_2025.xlsx");
+}
+
+renderApartmentList();
+</script>
+</body>
+</html>
